@@ -1,0 +1,69 @@
+name: Scheduled Sync
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+    inputs:
+      use_docker:
+        description: "Run using docker-compose"
+        type: boolean
+        default: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: ${{ !inputs.use_docker }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.6"
+
+      - name: Install dependencies
+        if: ${{ !inputs.use_docker }}
+        run: pip install -r requirements.txt
+
+      - name: Write users.json (non-docker)
+        if: ${{ !inputs.use_docker }}
+        env:
+          USERS_JSON: ${{ secrets.USERS_JSON }}
+          USERS_JSON_B64: ${{ secrets.USERS_JSON_B64 }}
+        run: |
+          if [ -n "${USERS_JSON_B64:-}" ]; then
+            printf '%s' "$USERS_JSON_B64" | base64 --decode > users.json
+          elif [ -n "${USERS_JSON:-}" ]; then
+            printf '%s' "$USERS_JSON" > users.json
+          else
+            echo "Missing USERS_JSON or USERS_JSON_B64 secret." >&2
+            exit 1
+          fi
+
+      - name: Sync
+        if: ${{ !inputs.use_docker }}
+        run: |
+          mkdir -p data
+          python src/main.py --config users.json --sync
+
+      - name: Write users.json (docker)
+        if: ${{ inputs.use_docker }}
+        env:
+          USERS_JSON: ${{ secrets.USERS_JSON }}
+          USERS_JSON_B64: ${{ secrets.USERS_JSON_B64 }}
+        run: |
+          mkdir -p config
+          if [ -n "${USERS_JSON_B64:-}" ]; then
+            printf '%s' "$USERS_JSON_B64" | base64 --decode > config/users.json
+          elif [ -n "${USERS_JSON:-}" ]; then
+            printf '%s' "$USERS_JSON" > config/users.json
+          else
+            echo "Missing USERS_JSON or USERS_JSON_B64 secret." >&2
+            exit 1
+          fi
+
+      - name: Sync (docker)
+        if: ${{ inputs.use_docker }}
+        run: docker-compose run --rm sync
