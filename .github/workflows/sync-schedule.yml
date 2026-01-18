@@ -2,7 +2,7 @@ name: Scheduled Sync
 
 on:
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 * * * *"
   workflow_dispatch:
     inputs:
       use_docker:
@@ -44,7 +44,9 @@ jobs:
 
       - name: Sync
         if: ${{ !inputs.use_docker }}
-        run: python src/main.py --config users.json --sync
+        run: |
+          mkdir -p data
+          python src/main.py --config users.json --sync
 
       - name: Write users.json (docker)
         if: ${{ inputs.use_docker }}
